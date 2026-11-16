@@ -4,7 +4,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "github:kartverket/kv-designsystem-test",
+    "url": "github:kartverket/kv-designsystem",
     "directory": "@kv-designsystem/react"
   },
   "files": [

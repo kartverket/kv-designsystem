@@ -4,7 +4,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "github:kartverket/kv-designsystem-test",
+    "url": "github:kartverket/kv-designsystem",
     "directory": "@kv-designsystem/theme"
   },
   "files": [
@@ -25,8 +25,7 @@
     "./dist/*": "./dist/*"
   },
   "publishConfig": {
-    "access": "public",
-    "tag": "alpha"
+    "access": "public"
   },
   "scripts": {
     "copy-css": "cp ../../design-tokens/dist/*.* ./dist/ && rm ./dist/colors.d.ts ./dist/blue.tailwind.css && mv ./dist/green.tailwind.css ./dist/tailwind.css",

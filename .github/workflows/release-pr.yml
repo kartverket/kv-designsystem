@@ -1,0 +1,88 @@
+name: Release PR
+
+# Step 1 of a release. Bumps the version of every published package from the
+# conventional commits since the last `v*` tag and opens a pull request with it.
+# Merging that pull request into main triggers `release-publish.yml`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      specifier:
+        description: 'Override the version bump (e.g. "prerelease", "minor" or "1.0.0"). Leave empty to derive it from commits.'
+        type: string
+        required: false
+
+permissions:
+  contents: write # push the release branch
+  pull-requests: write # open the release pull request
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0 # full history and tags, so Nx can find the previous release
+
+      - uses: ./.github/actions/setup
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump versions
+        env:
+          SPECIFIER: ${{ inputs.specifier }}
+        run: |
+          pnpm nx release version ${SPECIFIER:+--specifier "$SPECIFIER"} \
+            --git-commit=false --git-tag=false --stage-changes=false
+
+      - name: Read new version
+        id: version
+        run: |
+          if git diff --quiet; then
+            echo "No relevant changes since the last release, nothing to release."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "version=$(node -p "require('./@kv-designsystem/react/package.json').version")" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Preview release notes
+        if: steps.version.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          FIRST_RELEASE=$(git tag --list 'v*' | grep -q . || echo --first-release)
+          {
+            echo '## Release notes preview'
+            echo
+            pnpm nx release changelog "$VERSION" $FIRST_RELEASE --dry-run \
+              --git-commit=false --git-tag=false 2>&1 | sed -n 's/^+ \{0,1\}//p'
+          } > release-notes.md
+          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Push branch and open pull request
+        if: steps.version.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="release/v$VERSION"
+          git switch -c "$BRANCH"
+          git add -A -- ':!release-notes.md'
+          git commit -m "chore(release): $VERSION"
+          git push --force origin "$BRANCH"
+          # Pull requests opened with GITHUB_TOKEN don't trigger other workflows, so the
+          # Build workflow won't run on this PR. It runs on main after the merge instead.
+          if ! gh pr view "$BRANCH" --json url --jq .url 2>/dev/null; then
+            gh pr create --base main --head "$BRANCH" \
+              --title "chore(release): $VERSION" --body-file release-notes.md \
+            || echo "::warning::Could not open the pull request. Open it manually: ${{ github.server_url }}/${{ github.repository }}/compare/main...$BRANCH"
+          fi

@@ -38,7 +38,7 @@ Dette repoet erstatter Kartverkets gamle designsystem, [Kvib](https://github.com
 | [`@kv-designsystem/theme`](https://www.npmjs.com/package/@kv-designsystem/theme) | [`@kv-designsystem/theme`](./@kv-designsystem/theme) | Designtokens som CSS per tema, pluss TypeScript-typer               |
 
 > [!NOTE]
-> Pakkene er publisert på npm under `alpha`-taggen. `latest` kan ligge en versjon bak, så installer med `@alpha` for å få nyeste versjon.
+> Pakkene er fortsatt i alfa (`1.0.0-alpha.N`). Både `latest`- og `alpha`-taggen peker på nyeste versjon, så `npm install @kv-designsystem/react` og `@alpha` gir deg det samme.
 
 ## Bruk
 
@@ -130,6 +130,19 @@ design-tokens (kilde, privat)
         └─▶ @kv-designsystem/css (stilsett per tema + Tailwind-preset)
               └─▶ @kv-designsystem/react (komponenter + stilsett)
 ```
+
+## Publisering
+
+De tre pakkene får samme versjonsnummer, og versjonen bestemmes av commit-meldingene siden forrige release. Selve publiseringen skjer i GitHub Actions.
+
+1. Kjør workflowen [Release PR](../../actions/workflows/release-pr.yml) (Actions → Release PR → Run workflow). Den øker versjonen i alle `package.json`-filene og åpner en PR med tittelen `chore(release): <versjon>`. Forhåndsvisning av endringsloggen ligger i PR-beskrivelsen.
+2. Se over, godkjenn og merge PR-en.
+3. Når build er grønn på `main`, publiserer [Release publish](../../actions/workflows/release-publish.yml) pakkene til npm i riktig rekkefølge (theme, css, react), flytter `latest`- og `alpha`-taggene til den nye versjonen, tagger commiten `v<versjon>` og lager en [GitHub-release](../../releases).
+
+Mens vi er i alfa øker hver release bare tallet etter `alpha`. Ønsker du styre versjonen selv gjøres det ved å fylle inn feltet `specifier` når man kjører Release PR.
+
+> [!TIP]
+> Feiler publiseringen, kan du kjøre Release publish på nytt. Pakker som allerede er publisert, hoppes over, og taggen lages bare hvis den ikke finnes fra før.
 
 ## Bidra
 

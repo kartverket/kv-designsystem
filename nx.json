@@ -4,16 +4,22 @@
   "release": {
     "projects": ["@kv-designsystem/react", "@kv-designsystem/theme", "@kv-designsystem/css"],
     "projectsRelationship": "fixed",
+    "releaseTag": {
+      "pattern": "v{version}"
+    },
+    "version": {
+      "conventionalCommits": true,
+      "fallbackCurrentVersionResolver": "disk",
+      "preid": "alpha"
+    },
     "changelog": {
       "workspaceChangelog": {
+        "file": false,
         "createRelease": "github",
         "renderOptions": {
           "authors": false
         }
       }
-    },
-    "version": {
-      "conventionalCommits": true
     }
   },
   "targetDefaults": {
