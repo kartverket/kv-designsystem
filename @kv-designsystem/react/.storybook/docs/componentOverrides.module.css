@@ -1,6 +1,7 @@
 .heading {
   margin-bottom: var(--ds-size-2);
 
+  /* data-size: xl */
   &:where(h1) {
     margin-top: var(--ds-size-12);
     margin-bottom: var(--ds-size-6);
@@ -10,6 +11,7 @@
     }
   }
 
+  /* data-size: md */
   &:where(h2) {
     margin-top: var(--ds-size-10);
     margin-bottom: var(--ds-size-4);
@@ -19,6 +21,7 @@
     }
   }
 
+  /* data-size: sm */
   &:where(h3) {
     margin-top: var(--ds-size-8);
     margin-bottom: var(--ds-size-3);
@@ -28,6 +31,7 @@
     }
   }
 
+  /* data-size: xs */
   &:where(h4) {
     margin-top: var(--ds-size-6);
     margin-bottom: var(--ds-size-2);
@@ -37,8 +41,9 @@
     }
   }
 
+  /* data-size: 2xs */
   &:where(h5, h6) {
-    margin-top: var(--ds-size-4);
+    margin-top: var(--ds-size-5);
     margin-bottom: var(--ds-size-1);
   }
 
