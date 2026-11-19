@@ -54,16 +54,39 @@ jobs:
             echo "version=$(node -p "require('./@kv-designsystem/react/package.json').version")" >> "$GITHUB_OUTPUT"
           fi
 
+      # A manual specifier can move the version backwards or onto a version that is
+      # already on npm. Publishing would then skip the packages but still tag and
+      # create a GitHub release, or move `latest` back to an older version.
+      - name: Check that the new version is higher and unpublished
+        if: steps.version.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          CURRENT=$(git show HEAD:@kv-designsystem/react/package.json | node -p "JSON.parse(require('fs').readFileSync(0)).version")
+          # semver isn't a root dependency, so load the copy Nx depends on.
+          if ! node -e "
+            const semver = require(require.resolve('semver', { paths: [require('path').dirname(require.resolve('nx/package.json'))] }));
+            process.exit(semver.gt(process.argv[1], process.argv[2]) ? 0 : 1);
+          " "$VERSION" "$CURRENT"; then
+            echo "::error::New version $VERSION is not higher than the current version $CURRENT."
+            exit 1
+          fi
+          for pkg in theme css react; do
+            if curl -sfo /dev/null "https://registry.npmjs.org/@kv-designsystem%2F$pkg/$VERSION"; then
+              echo "::error::@kv-designsystem/$pkg@$VERSION is already on npm."
+              exit 1
+            fi
+          done
+
       - name: Preview release notes
         if: steps.version.outputs.changed == 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          FIRST_RELEASE=$(git tag --list 'v*' | grep -q . || echo --first-release)
           {
             echo '## Release notes preview'
             echo
-            pnpm nx release changelog "$VERSION" $FIRST_RELEASE --dry-run \
+            pnpm nx release changelog "$VERSION" --dry-run \
               --git-commit=false --git-tag=false 2>&1 | sed -n 's/^+ \{0,1\}//p'
           } > release-notes.md
           cat release-notes.md >> "$GITHUB_STEP_SUMMARY"

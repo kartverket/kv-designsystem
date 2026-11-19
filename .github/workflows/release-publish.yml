@@ -84,7 +84,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          FIRST_RELEASE=$(git tag --list 'v*' | grep -q . || echo --first-release)
           # The checkout is a detached HEAD, so push only the new tag, not a branch.
-          pnpm nx release changelog "$VERSION" $FIRST_RELEASE \
+          pnpm nx release changelog "$VERSION" \
             --git-commit=false --git-tag --git-push --git-push-args "refs/tags/v$VERSION"
