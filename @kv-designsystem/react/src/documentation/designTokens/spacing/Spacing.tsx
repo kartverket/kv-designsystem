@@ -44,7 +44,7 @@ const headingSpacing: {
     { variant: 'Heading md (30px)', top: 'size-10 (40px)', toParagraph: 'size-4 (16px)', nextHeading: 'size-5 (20px)' },
     { variant: 'Heading sm (24px)', top: 'size-8 (32px)', toParagraph: 'size-3 (12px)', nextHeading: 'size-4 (16px)' },
     { variant: 'Heading xs (21px)', top: 'size-6 (24px)', toParagraph: 'size-2 (8px)', nextHeading: 'size-3 (12px)' },
-    { variant: 'Heading 2xs (18px)', top: 'size-4 (16px)', toParagraph: 'size-1 (4px)', nextHeading: '-' },
+    { variant: 'Heading 2xs (18px)', top: 'size-5 (20px)', toParagraph: 'size-1 (4px)', nextHeading: '-' },
   ];
 
 // oxfmt-ignore

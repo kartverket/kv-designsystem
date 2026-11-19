@@ -1,6 +1,7 @@
 import { Meta } from '@storybook/addon-docs/blocks';
 import { TokensSizesTable, HeadingSpacingTable, ParapgraphSpacingTable, ComponentSpacingTable } from './Spacing';
 import { SizeTabs } from './SizeTabs';
+import { FeedbackSection } from '../../_shared/FeedbackSection';
 import ComponentSizeBalance from '../../../../assets/img/Component-Size-Balance.png';
 import ComponentSizeButton from '../../../../assets/img/Component-Size-Buttons.png';
 import ComponentSizeExample from '../../../../assets/img/Component-Size-Example.png';
@@ -10,6 +11,8 @@ import ComponentSizeExample from '../../../../assets/img/Component-Size-Example.
 # Størrelser og avstander
 
 Vi bruker størrelsesvariabler (design tokens) for å definere spacing (avstander), sizing (bredder og høyder) og fontstørrelser på en konsistent måte. Verdien til størrelsesvariablene avhenger av hvilken størrelsesmodus som er aktiv. 
+
+<FeedbackSection />
 
 ## Tokens i ulike størrelsesmodus
 
@@ -66,7 +69,7 @@ Du kan endre størrelsesmodus for et element og alle dets etterkommere ved å se
 
 <HeadingSpacingTable />
 
-Du kan også bruke samme avstander som “Ned til Paragraph md” fra Heading til andre komponenter i medium størrelsesmodus. Dette kan for eksempel være til en `Button`, `Table` eller et bilde.
+Du kan også bruke samme avstander som “Ned til Paragraph md” fra Heading til andre komponenter i medium størrelsesmodus. Dette kan for eksempel være til en `Button`, `Table` eller et bilde. I noen tilfeller kan det være fornuftig med litt mer avstand fra de minste Heading-størrelsene til store elementer under, som et bilde.
 
 ### Avstander rundt Paragraph
 
@@ -75,6 +78,8 @@ Du kan også bruke samme avstander som “Ned til Paragraph md” fra Heading ti
 ### Avstander mellom andre komponenter
 
 <ComponentSpacingTable />
+
+I et skjema der inputfelter er gruppert, f.eks. for personalia, betalingsinformasjon og preferanser, kan de med fordel få en større avstand mellom hverandre. Da anbefaler vi `size-12 (48px)`.
 
 ## Kilde
 
