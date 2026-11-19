@@ -5,12 +5,12 @@
     "projects": ["@kv-designsystem/react", "@kv-designsystem/theme", "@kv-designsystem/css"],
     "projectsRelationship": "fixed",
     "releaseTag": {
-      "pattern": "v{version}"
+      "pattern": "v{version}",
+      "strictPreid": false
     },
     "version": {
       "conventionalCommits": true,
-      "fallbackCurrentVersionResolver": "disk",
-      "preid": "alpha"
+      "fallbackCurrentVersionResolver": "disk"
     },
     "changelog": {
       "workspaceChangelog": {

@@ -2,11 +2,12 @@ name: Release publish
 
 # Step 2 of a release. Runs after Build succeeds on main. If the commit changed
 # the package version (i.e. a release PR from `release-pr.yml` was merged), it
-# publishes all packages to npm, tags the commit `v<version>` and creates a
-# GitHub release.
+# publishes all packages to npm and creates a GitHub release, which also creates
+# the `v<version>` tag on the commit.
 #
-# Every step is safe to re-run: Nx skips versions that are already on npm, and
-# the tag/release step is skipped when the tag already exists.
+# The whole workflow is safe to re-run: Nx skips versions that are already on npm,
+# and nothing is published once the GitHub release exists. If Build failed on the
+# release commit, re-run Build instead; this workflow only starts after it succeeds.
 #
 # npm authenticates with trusted publishing (OIDC), so there is no npm token.
 # Each package must have this workflow file (`release-publish.yml`) registered
@@ -18,72 +19,120 @@ on:
     types: [completed]
     branches: [main]
 
-permissions:
-  contents: write # push the tag and create the GitHub release
-  id-token: write # npm trusted publishing and provenance
-
-concurrency:
-  group: release
-  cancel-in-progress: false
+permissions: {}
 
 jobs:
-  publish:
+  check:
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    permissions:
+      contents: read
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+      version: ${{ steps.check.outputs.version }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 0 # tags and history for the release notes
+          fetch-depth: 2 # the commit and its first parent
+          persist-credentials: false
 
       - name: Check whether this commit is a release
         id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION=$(node -p "require('./@kv-designsystem/react/package.json').version")
+          read_version() { node -p "JSON.parse(require('fs').readFileSync(0)).version"; }
+          VERSION=$(read_version < @kv-designsystem/react/package.json)
+          PREVIOUS=$(git show HEAD^:@kv-designsystem/react/package.json | read_version)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          if ! git diff HEAD^ HEAD -- @kv-designsystem/react/package.json | grep -q '"version"'; then
+          if [ "$VERSION" = "$PREVIOUS" ]; then
             echo "Version unchanged in this commit, nothing to release."
             echo "release=false" >> "$GITHUB_OUTPUT"
-          elif git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
-            echo "Tag v$VERSION already exists, already released."
+          elif gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub release v$VERSION already exists, already released."
             echo "release=false" >> "$GITHUB_OUTPUT"
           else
             echo "release=true" >> "$GITHUB_OUTPUT"
           fi
 
+  # Builds without the OIDC token, so dependency and build-tool code can't publish.
+  build:
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
       - uses: ./.github/actions/setup
-        if: steps.check.outputs.release == 'true'
 
       - name: Build packages
-        if: steps.check.outputs.release == 'true'
         run: pnpm nx run-many -t build -p @kv-designsystem/theme @kv-designsystem/css @kv-designsystem/react
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: |
+            @kv-designsystem/theme/dist
+            @kv-designsystem/css/dist
+            @kv-designsystem/react/dist
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # create the GitHub release and its tag
+      id-token: write # npm trusted publishing and provenance
+    concurrency:
+      group: release
+      cancel-in-progress: false
+      queue: max # the default queue cancels a pending run when another one is queued
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0 # tags and history for the release notes
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: '@kv-designsystem'
 
       # While every version is a prerelease, `latest` gets the newest alpha. npm
       # refuses to publish a prerelease without an explicit tag, hence `--tag latest`.
       - name: Publish to npm
-        if: steps.check.outputs.release == 'true'
         run: pnpm nx release publish --tag latest
 
       # Keep `alpha` pointing at the same version as `latest` for consumers who
       # install with `@alpha`. Requires "Allow npm dist-tag" in each package's
       # trusted publishing settings (pnpm >= 12.12.1 authenticates with OIDC).
       - name: Move the alpha dist-tag
-        if: steps.check.outputs.release == 'true'
         env:
-          VERSION: ${{ steps.check.outputs.version }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           for pkg in theme css react; do
             pnpm dist-tag add "@kv-designsystem/$pkg@$VERSION" alpha
           done
 
-      - name: Tag and create GitHub release
-        if: steps.check.outputs.release == 'true'
+      # GitHub creates the `v<version>` tag on this commit together with the release,
+      # so a failed release leaves no tag behind and a re-run tries again.
+      # stdin is closed so Nx's "finish in the browser?" prompt fails instead of waiting.
+      - name: Create GitHub release
         env:
-          VERSION: ${{ steps.check.outputs.version }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # The checkout is a detached HEAD, so push only the new tag, not a branch.
           pnpm nx release changelog "$VERSION" \
-            --git-commit=false --git-tag --git-push --git-push-args "refs/tags/v$VERSION"
+            --git-commit=false --git-tag=false --git-push=false < /dev/null

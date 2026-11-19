@@ -137,12 +137,12 @@ De tre pakkene får samme versjonsnummer, og versjonen bestemmes av commit-meldi
 
 1. Kjør workflowen [Release PR](../../actions/workflows/release-pr.yml) (Actions → Release PR → Run workflow). Den øker versjonen i alle `package.json`-filene og åpner en PR med tittelen `chore(release): <versjon>`. Forhåndsvisning av endringsloggen ligger i PR-beskrivelsen.
 2. Se over, godkjenn og merge PR-en.
-3. Når build er grønn på `main`, publiserer [Release publish](../../actions/workflows/release-publish.yml) pakkene til npm i riktig rekkefølge (theme, css, react), flytter `latest`- og `alpha`-taggene til den nye versjonen, tagger commiten `v<versjon>` og lager en [GitHub-release](../../releases).
+3. Når build er grønn på `main`, publiserer [Release publish](../../actions/workflows/release-publish.yml) pakkene til npm i riktig rekkefølge (theme, css, react), flytter `latest`- og `alpha`-taggene til den nye versjonen og lager en [GitHub-release](../../releases). GitHub lager samtidig taggen `v<versjon>` på commiten.
 
-Mens vi er i alfa øker hver release bare tallet etter `alpha`. Ønsker du styre versjonen selv gjøres det ved å fylle inn feltet `specifier` når man kjører Release PR.
+Mens vi er i alfa øker hver release bare tallet etter `alpha`, også ved breaking changes. Versjonen går aldri til en stabil versjon av seg selv. Ønsker du styre versjonen selv, fyller du inn feltet `specifier` når du kjører Release PR, for eksempel `1.1.0-alpha.0`. For å gå ut av alfa skriver du inn den nøyaktige versjonen, for eksempel `1.0.0`. `major`, `minor` og `patch` blir avvist så lenge vi er i alfa.
 
 > [!TIP]
-> Feiler publiseringen, kan du kjøre Release publish på nytt. Pakker som allerede er publisert, hoppes over, og taggen lages bare hvis den ikke finnes fra før.
+> Feiler Release publish, kan du kjøre den på nytt. Pakker som allerede er publisert, hoppes over, og ingenting publiseres hvis GitHub-releasen allerede finnes. Ble Release publish ikke kjørt fordi build feilet på `main`, kjører du Build på nytt for release-commiten i stedet.
 
 ## Bidra
 

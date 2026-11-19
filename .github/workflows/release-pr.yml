@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       specifier:
-        description: 'Override the version bump (e.g. "prerelease", "minor" or "1.0.0"). Leave empty to derive it from commits.'
+        description: 'Override the version bump, e.g. "prerelease" or "1.1.0-alpha.0". Leave empty to derive it from commits. To leave alpha, enter the exact stable version, e.g. "1.0.0".'
         type: string
         required: false
 
@@ -19,6 +19,7 @@ permissions:
 concurrency:
   group: release
   cancel-in-progress: false
+  queue: max # the default queue cancels a pending run when another one is queued
 
 jobs:
   release-pr:
@@ -55,33 +56,52 @@ jobs:
           fi
 
       # A manual specifier can move the version backwards or onto a version that is
-      # already on npm. Publishing would then skip the packages but still tag and
-      # create a GitHub release, or move `latest` back to an older version.
-      - name: Check that the new version is higher and unpublished
+      # already on npm. Publishing would then skip the packages but still create a
+      # GitHub release, or move `latest` back to an older version. Leaving alpha
+      # (e.g. "minor" from 1.0.0-alpha.N gives 1.0.0) must be asked for explicitly by
+      # entering the exact stable version as the specifier.
+      - name: Check the new version
         if: steps.version.outputs.changed == 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          SPECIFIER: ${{ inputs.specifier }}
         run: |
           CURRENT=$(git show HEAD:@kv-designsystem/react/package.json | node -p "JSON.parse(require('fs').readFileSync(0)).version")
           # semver isn't a root dependency, so load the copy Nx depends on.
-          if ! node -e "
+          node -e "
             const semver = require(require.resolve('semver', { paths: [require('path').dirname(require.resolve('nx/package.json'))] }));
-            process.exit(semver.gt(process.argv[1], process.argv[2]) ? 0 : 1);
-          " "$VERSION" "$CURRENT"; then
-            echo "::error::New version $VERSION is not higher than the current version $CURRENT."
-            exit 1
-          fi
+            const [version, current, specifier] = process.argv.slice(1);
+            if (!semver.gt(version, current)) {
+              console.log('::error::New version ' + version + ' is not higher than the current version ' + current + '.');
+              process.exit(1);
+            }
+            if (semver.prerelease(current) && !semver.prerelease(version) && specifier !== version) {
+              console.log('::error::' + version + ' would leave the prerelease. To release it, run again with the specifier set to exactly \"' + version + '\".');
+              process.exit(1);
+            }
+          " "$VERSION" "$CURRENT" "$SPECIFIER"
           for pkg in theme css react; do
-            if curl -sfo /dev/null "https://registry.npmjs.org/@kv-designsystem%2F$pkg/$VERSION"; then
-              echo "::error::@kv-designsystem/$pkg@$VERSION is already on npm."
-              exit 1
-            fi
+            STATUS=$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/@kv-designsystem%2F$pkg/$VERSION" || true)
+            case "$STATUS" in
+              404) ;;
+              200)
+                echo "::error::@kv-designsystem/$pkg@$VERSION is already on npm."
+                exit 1
+                ;;
+              *)
+                echo "::error::Could not check whether @kv-designsystem/$pkg@$VERSION is on npm (HTTP $STATUS)."
+                exit 1
+                ;;
+            esac
           done
 
       - name: Preview release notes
         if: steps.version.outputs.changed == 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          # Nx colours its output in CI, which would hide the `+ ` prefix from sed.
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
         run: |
           {
             echo '## Release notes preview'
