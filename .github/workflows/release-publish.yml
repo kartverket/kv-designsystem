@@ -6,7 +6,8 @@ name: Release publish
 # the `v<version>` tag on the commit.
 #
 # The whole workflow is safe to re-run: Nx skips versions that are already on npm,
-# and nothing is published once the GitHub release exists. If Build failed on the
+# nothing is published once the GitHub release exists, and a version older than
+# `latest` or `alpha` on npm is never published. If Build failed on the
 # release commit, re-run Build instead; this workflow only starts after it succeeds.
 #
 # npm authenticates with trusted publishing (OIDC), so there is no npm token.
@@ -109,6 +110,33 @@ jobs:
         with:
           name: dist
           path: '@kv-designsystem'
+
+      # The release lock runs one publish at a time, but not in version order: Builds
+      # can finish out of order, and an older release can be re-run after a newer one
+      # went out. Publishing with `--tag latest` would then move `latest` and `alpha`
+      # back to the older version, so stop if either tag is already ahead. The same
+      # version is allowed, so a re-run can finish a partly published release.
+      - name: Check that no newer version is on npm
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          for pkg in theme css react; do
+            TAGS=$(curl -sf "https://registry.npmjs.org/-/package/@kv-designsystem%2F$pkg/dist-tags") || {
+              echo "::error::Could not read the npm dist-tags of @kv-designsystem/$pkg."
+              exit 1
+            }
+            # semver isn't a root dependency, so load the copy Nx depends on.
+            node -e "
+              const semver = require(require.resolve('semver', { paths: [require('path').dirname(require.resolve('nx/package.json'))] }));
+              const [version, pkg, tags] = process.argv.slice(1);
+              for (const [tag, current] of Object.entries(JSON.parse(tags))) {
+                if (['latest', 'alpha'].includes(tag) && semver.lt(version, current)) {
+                  console.log('::error::@kv-designsystem/' + pkg + '@' + tag + ' is ' + current + ', newer than ' + version + '. Not publishing, so the tag does not move back.');
+                  process.exit(1);
+                }
+              }
+            " "$VERSION" "$pkg" "$TAGS"
+          done
 
       # While every version is a prerelease, `latest` gets the newest alpha. npm
       # refuses to publish a prerelease without an explicit tag, hence `--tag latest`.

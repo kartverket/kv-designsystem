@@ -142,7 +142,7 @@ De tre pakkene får samme versjonsnummer, og versjonen bestemmes av commit-meldi
 Mens vi er i alfa øker hver release bare tallet etter `alpha`, også ved breaking changes. Versjonen går aldri til en stabil versjon av seg selv. Ønsker du styre versjonen selv, fyller du inn feltet `specifier` når du kjører Release PR, for eksempel `1.1.0-alpha.0`. For å gå ut av alfa skriver du inn den nøyaktige versjonen, for eksempel `1.0.0`. `major`, `minor` og `patch` blir avvist så lenge vi er i alfa.
 
 > [!TIP]
-> Feiler Release publish, kan du kjøre den på nytt. Pakker som allerede er publisert, hoppes over, og ingenting publiseres hvis GitHub-releasen allerede finnes. Ble Release publish ikke kjørt fordi build feilet på `main`, kjører du Build på nytt for release-commiten i stedet.
+> Feiler Release publish, kan du kjøre den på nytt. Pakker som allerede er publisert, hoppes over, og ingenting publiseres hvis GitHub-releasen allerede finnes. En versjon som er eldre enn `latest` eller `alpha` på npm, blir aldri publisert, så en eldre release kan ikke flytte taggene tilbake. Ble Release publish ikke kjørt fordi build feilet på `main`, kjører du Build på nytt for release-commiten i stedet.
 
 ## Bidra
 
