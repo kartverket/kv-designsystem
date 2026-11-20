@@ -1,0 +1,39 @@
+diff --git a/dist/src/command-line/release/utils/repository-git-tags.js b/dist/src/command-line/release/utils/repository-git-tags.js
+index f0b60f36fbffc315b25589d0afff6a4335245245..c34c0e498dc354dc903e1d8f1855f44dd9665d04 100644
+--- a/dist/src/command-line/release/utils/repository-git-tags.js
++++ b/dist/src/command-line/release/utils/repository-git-tags.js
+@@ -110,7 +110,7 @@ async function _RepoGitTags_alwaysCheckAllBranches(checkAllBranchesWhen) {
+             // Check if any glob pattern matches next
+             if (!alwaysCheckAllBranches) {
+                 alwaysCheckAllBranches = checkAllBranchesWhen.some((pattern) => {
+-                    const r = minimatch_1.minimatch.makeRe(pattern, { dot: true });
++                    const r = ((mm) => ({ test: (s) => mm.match(s) }))(new minimatch_1.Minimatch(pattern, { dot: true }));
+                     if (!r) {
+                         return false;
+                     }
+diff --git a/dist/src/generators/utils/glob.js b/dist/src/generators/utils/glob.js
+index af0e4c3a456ca9e650f0796ed378ae3eb8535ca7..6d5fed4438ab222254987e0ecf036eb87e0154d8 100644
+--- a/dist/src/generators/utils/glob.js
++++ b/dist/src/generators/utils/glob.js
+@@ -33,7 +33,7 @@ async function globAsync(tree, patterns) {
+ function combineGlobResultsWithTree(tree, patterns, results) {
+     const matches = new Set(results);
+     const combinedGlob = (0, globs_1.combineGlobPatterns)(patterns);
+-    const matcher = minimatch_1.minimatch.makeRe(combinedGlob);
++    const matcher = ((mm) => ({ test: (s) => mm.match(s) }))(new minimatch_1.Minimatch(combinedGlob));
+     if (!matcher) {
+         throw new Error('Invalid glob pattern: ' + combinedGlob);
+     }
+diff --git a/dist/src/utils/find-matching-projects.js b/dist/src/utils/find-matching-projects.js
+index b4438447ac6918372b60502006795ef061519d83..531fba0635f1e22eba95fdcc4d23bfa9b2bfb265 100644
+--- a/dist/src/utils/find-matching-projects.js
++++ b/dist/src/utils/find-matching-projects.js
+@@ -201,7 +201,7 @@ exports.getMatchingStringsWithCache = (() => {
+         }
+         const patternCache = minimatchCache.get(pattern);
+         if (!regexCache.has(pattern)) {
+-            const regex = minimatch_1.minimatch.makeRe(pattern, { dot: true });
++            const regex = ((mm) => ({ test: (s) => mm.match(s) }))(new minimatch_1.Minimatch(pattern, { dot: true }));
+             if (regex) {
+                 regexCache.set(pattern, regex);
+             }
