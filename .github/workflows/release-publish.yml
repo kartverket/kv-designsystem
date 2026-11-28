@@ -1,0 +1,166 @@
+name: Release publish
+
+# Step 2 of a release. Runs after Build succeeds on main. If the commit changed
+# the package version (i.e. a release PR from `release-pr.yml` was merged), it
+# publishes all packages to npm and creates a GitHub release, which also creates
+# the `v<version>` tag on the commit.
+#
+# The whole workflow is safe to re-run: Nx skips versions that are already on npm,
+# nothing is published once the GitHub release exists, and a version older than
+# `latest` or `alpha` on npm is never published. If Build failed on the
+# release commit, re-run Build instead; this workflow only starts after it succeeds.
+#
+# npm authenticates with trusted publishing (OIDC), so there is no npm token.
+# Each package must have this workflow file (`release-publish.yml`) registered
+# as a trusted publisher on npmjs.com, with "Allow npm dist-tag" turned on.
+
+on:
+  workflow_run:
+    workflows: ['Build']
+    types: [completed]
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    permissions:
+      contents: read
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2 # the commit and its first parent
+          persist-credentials: false
+
+      - name: Check whether this commit is a release
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          read_version() { node -p "JSON.parse(require('fs').readFileSync(0)).version"; }
+          VERSION=$(read_version < @kv-designsystem/react/package.json)
+          PREVIOUS=$(git show HEAD^:@kv-designsystem/react/package.json | read_version)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [ "$VERSION" = "$PREVIOUS" ]; then
+            echo "Version unchanged in this commit, nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          elif gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub release v$VERSION already exists, already released."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Builds without the OIDC token, so dependency and build-tool code can't publish.
+  build:
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      - name: Build packages
+        run: pnpm nx run-many -t build -p @kv-designsystem/theme @kv-designsystem/css @kv-designsystem/react
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: |
+            @kv-designsystem/theme/dist
+            @kv-designsystem/css/dist
+            @kv-designsystem/react/dist
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # create the GitHub release and its tag
+      id-token: write # npm trusted publishing and provenance
+    concurrency:
+      group: release
+      cancel-in-progress: false
+      queue: max # the default queue cancels a pending run when another one is queued
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0 # tags and history for the release notes
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: '@kv-designsystem'
+
+      # The release lock runs one publish at a time, but not in version order: Builds
+      # can finish out of order, and an older release can be re-run after a newer one
+      # went out. Publishing with `--tag latest` would then move `latest` and `alpha`
+      # back to the older version, so stop if either tag is already ahead. The same
+      # version is allowed, so a re-run can finish a partly published release.
+      - name: Check that no newer version is on npm
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          for pkg in theme css react; do
+            TAGS=$(curl -sf "https://registry.npmjs.org/-/package/@kv-designsystem%2F$pkg/dist-tags") || {
+              echo "::error::Could not read the npm dist-tags of @kv-designsystem/$pkg."
+              exit 1
+            }
+            # semver isn't a root dependency, so load the copy Nx depends on.
+            node -e "
+              const semver = require(require.resolve('semver', { paths: [require('path').dirname(require.resolve('nx/package.json'))] }));
+              const [version, pkg, tags] = process.argv.slice(1);
+              for (const [tag, current] of Object.entries(JSON.parse(tags))) {
+                if (['latest', 'alpha'].includes(tag) && semver.lt(version, current)) {
+                  console.log('::error::@kv-designsystem/' + pkg + '@' + tag + ' is ' + current + ', newer than ' + version + '. Not publishing, so the tag does not move back.');
+                  process.exit(1);
+                }
+              }
+            " "$VERSION" "$pkg" "$TAGS"
+          done
+
+      # While every version is a prerelease, `latest` gets the newest alpha. npm
+      # refuses to publish a prerelease without an explicit tag, hence `--tag latest`.
+      - name: Publish to npm
+        run: pnpm nx release publish --tag latest
+
+      # Keep `alpha` pointing at the same version as `latest` for consumers who
+      # install with `@alpha`. Requires "Allow npm dist-tag" in each package's
+      # trusted publishing settings (pnpm >= 12.12.1 authenticates with OIDC).
+      - name: Move the alpha dist-tag
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          for pkg in theme css react; do
+            pnpm dist-tag add "@kv-designsystem/$pkg@$VERSION" alpha
+          done
+
+      # GitHub creates the `v<version>` tag on this commit together with the release,
+      # so a failed release leaves no tag behind and a re-run tries again.
+      # stdin is closed so Nx's "finish in the browser?" prompt fails instead of waiting.
+      - name: Create GitHub release
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          pnpm nx release changelog "$VERSION" \
+            --git-commit=false --git-tag=false --git-push=false < /dev/null

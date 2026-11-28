@@ -1,0 +1,131 @@
+name: Release PR
+
+# Step 1 of a release. Bumps the version of every published package from the
+# conventional commits since the last `v*` tag and opens a pull request with it.
+# Merging that pull request into main triggers `release-publish.yml`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      specifier:
+        description: 'Override the version bump, e.g. "prerelease" or "1.1.0-alpha.0". Leave empty to derive it from commits. To leave alpha, enter the exact stable version, e.g. "1.0.0".'
+        type: string
+        required: false
+
+permissions:
+  contents: write # push the release branch
+  pull-requests: write # open the release pull request
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+  queue: max # the default queue cancels a pending run when another one is queued
+
+jobs:
+  release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0 # full history and tags, so Nx can find the previous release
+
+      - uses: ./.github/actions/setup
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump versions
+        env:
+          SPECIFIER: ${{ inputs.specifier }}
+        run: |
+          pnpm nx release version ${SPECIFIER:+--specifier "$SPECIFIER"} \
+            --git-commit=false --git-tag=false --stage-changes=false
+
+      - name: Read new version
+        id: version
+        run: |
+          if git diff --quiet; then
+            echo "No relevant changes since the last release, nothing to release."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "version=$(node -p "require('./@kv-designsystem/react/package.json').version")" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A manual specifier can move the version backwards or onto a version that is
+      # already on npm. Publishing would then skip the packages but still create a
+      # GitHub release, or move `latest` back to an older version. Leaving alpha
+      # (e.g. "minor" from 1.0.0-alpha.N gives 1.0.0) must be asked for explicitly by
+      # entering the exact stable version as the specifier.
+      - name: Check the new version
+        if: steps.version.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SPECIFIER: ${{ inputs.specifier }}
+        run: |
+          CURRENT=$(git show HEAD:@kv-designsystem/react/package.json | node -p "JSON.parse(require('fs').readFileSync(0)).version")
+          # semver isn't a root dependency, so load the copy Nx depends on.
+          node -e "
+            const semver = require(require.resolve('semver', { paths: [require('path').dirname(require.resolve('nx/package.json'))] }));
+            const [version, current, specifier] = process.argv.slice(1);
+            if (!semver.gt(version, current)) {
+              console.log('::error::New version ' + version + ' is not higher than the current version ' + current + '.');
+              process.exit(1);
+            }
+            if (semver.prerelease(current) && !semver.prerelease(version) && specifier !== version) {
+              console.log('::error::' + version + ' would leave the prerelease. To release it, run again with the specifier set to exactly \"' + version + '\".');
+              process.exit(1);
+            }
+          " "$VERSION" "$CURRENT" "$SPECIFIER"
+          for pkg in theme css react; do
+            STATUS=$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/@kv-designsystem%2F$pkg/$VERSION" || true)
+            case "$STATUS" in
+              404) ;;
+              200)
+                echo "::error::@kv-designsystem/$pkg@$VERSION is already on npm."
+                exit 1
+                ;;
+              *)
+                echo "::error::Could not check whether @kv-designsystem/$pkg@$VERSION is on npm (HTTP $STATUS)."
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Preview release notes
+        if: steps.version.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          # Nx colours its output in CI, which would hide the `+ ` prefix from sed.
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: |
+          {
+            echo '## Release notes preview'
+            echo
+            pnpm nx release changelog "$VERSION" --dry-run \
+              --git-commit=false --git-tag=false 2>&1 | sed -n 's/^+ \{0,1\}//p'
+          } > release-notes.md
+          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Push branch and open pull request
+        if: steps.version.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="release/v$VERSION"
+          git switch -c "$BRANCH"
+          git add -A -- ':!release-notes.md'
+          git commit -m "chore(release): $VERSION"
+          git push --force origin "$BRANCH"
+          # Pull requests opened with GITHUB_TOKEN don't trigger other workflows, so the
+          # Build workflow won't run on this PR. It runs on main after the merge instead.
+          if ! gh pr view "$BRANCH" --json url --jq .url 2>/dev/null; then
+            gh pr create --base main --head "$BRANCH" \
+              --title "chore(release): $VERSION" --body-file release-notes.md \
+            || echo "::warning::Could not open the pull request. Open it manually: ${{ github.server_url }}/${{ github.repository }}/compare/main...$BRANCH"
+          fi

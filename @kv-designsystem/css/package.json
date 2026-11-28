@@ -4,7 +4,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "github:kartverket/kv-designsystem-test",
+    "url": "github:kartverket/kv-designsystem",
     "directory": "@kv-designsystem/css"
   },
   "files": [
@@ -27,8 +27,7 @@
     "./components.css": "./dist/components.css"
   },
   "publishConfig": {
-    "access": "public",
-    "tag": "alpha"
+    "access": "public"
   },
   "scripts": {
     "build": "postcss \"src/*.css\" --base src --dir dist && cp ../../@internal/build-tools/css-import.d.ts dist/css-import.d.ts",

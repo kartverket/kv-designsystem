@@ -38,7 +38,7 @@ Dette repoet erstatter Kartverkets gamle designsystem, [Kvib](https://github.com
 | [`@kv-designsystem/theme`](https://www.npmjs.com/package/@kv-designsystem/theme) | [`@kv-designsystem/theme`](./@kv-designsystem/theme) | Designtokens som CSS per tema, pluss TypeScript-typer               |
 
 > [!NOTE]
-> Pakkene er publisert på npm under `alpha`-taggen. `latest` kan ligge en versjon bak, så installer med `@alpha` for å få nyeste versjon.
+> Pakkene er fortsatt i alfa (`1.0.0-alpha.N`). Både `latest`- og `alpha`-taggen peker på nyeste versjon, så `npm install @kv-designsystem/react` og `@alpha` gir deg det samme.
 
 ## Bruk
 
@@ -130,6 +130,19 @@ design-tokens (kilde, privat)
         └─▶ @kv-designsystem/css (stilsett per tema + Tailwind-preset)
               └─▶ @kv-designsystem/react (komponenter + stilsett)
 ```
+
+## Publisering
+
+De tre pakkene får samme versjonsnummer, og versjonen bestemmes av commit-meldingene siden forrige release. Selve publiseringen skjer i GitHub Actions.
+
+1. Kjør workflowen [Release PR](../../actions/workflows/release-pr.yml) (Actions → Release PR → Run workflow). Den øker versjonen i alle `package.json`-filene og åpner en PR med tittelen `chore(release): <versjon>`. Forhåndsvisning av endringsloggen ligger i PR-beskrivelsen.
+2. Se over, godkjenn og merge PR-en.
+3. Når build er grønn på `main`, publiserer [Release publish](../../actions/workflows/release-publish.yml) pakkene til npm i riktig rekkefølge (theme, css, react), flytter `latest`- og `alpha`-taggene til den nye versjonen og lager en [GitHub-release](../../releases). GitHub lager samtidig taggen `v<versjon>` på commiten.
+
+Mens vi er i alfa øker hver release bare tallet etter `alpha`, også ved breaking changes. Versjonen går aldri til en stabil versjon av seg selv. Ønsker du styre versjonen selv, fyller du inn feltet `specifier` når du kjører Release PR, for eksempel `1.1.0-alpha.0`. For å gå ut av alfa skriver du inn den nøyaktige versjonen, for eksempel `1.0.0`. `major`, `minor` og `patch` blir avvist så lenge vi er i alfa.
+
+> [!TIP]
+> Feiler Release publish, kan du kjøre den på nytt. Pakker som allerede er publisert, hoppes over, og ingenting publiseres hvis GitHub-releasen allerede finnes. En versjon som er eldre enn `latest` eller `alpha` på npm, blir aldri publisert, så en eldre release kan ikke flytte taggene tilbake. Ble Release publish ikke kjørt fordi build feilet på `main`, kjører du Build på nytt for release-commiten i stedet.
 
 ## Bidra
 

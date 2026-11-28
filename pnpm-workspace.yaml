@@ -84,3 +84,6 @@ packageExtensions:
         optional: true
       react:
         optional: true
+
+patchedDependencies:
+  nx@23.3.0: patches/nx@23.3.0.patch
